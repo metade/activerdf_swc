@@ -27,9 +27,10 @@ describe SWCAdapter do
       @triples = @adapter.size
       
       @q = Query.new
-      @q.select(:name)
+      @q.select_distinct(:name, :mbox)
       @q.where(RDFS::Resource.new('http://dig.csail.mit.edu/2005/ajar/ajaw/data#Tabulator'), RDFS::Resource.new('http://usefulinc.com/ns/doap#developer'), :dev)
       @q.where(:dev, RDFS::Resource.new('http://xmlns.com/foaf/0.1/name'), :name)
+      @q.where(:dev, RDFS::Resource.new('http://xmlns.com/foaf/0.1/mbox'), :mbox)
       
       @results = @q.execute
     end
