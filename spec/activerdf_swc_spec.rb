@@ -13,16 +13,17 @@ describe SWCAdapter do
   
   before(:each) do
     Namespace.register :doap, 'http://usefulinc.com/ns/doap#'
+    Namespace.register :foaf, 'http://xmlns.com/foaf/0.1/'
     @tabulator = RDFS::Resource.new('http://dig.csail.mit.edu/2005/ajar/ajaw/data#Tabulator')
   end
   
-  describe 'running a simple query' do
+  describe "running a query for retriving the tabulator project's name" do
     before(:each) do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
       mock_fetch('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_fetch('http://usefulinc.com/ns/doap', 'doap-clean')
+      mock_fetch('http://usefulinc.com/ns/doap')
       
       @q = Query.new
       @q.select_distinct(:name)
@@ -32,13 +33,41 @@ describe SWCAdapter do
     end
     
     it "should have loaded some triples" do
-      @adapter.size.should == 11
+      @adapter.should have_at_least(1).items
     end
     
     it "should have got some results" do
       @results.should == ['The Tabulator Project']
-    end    
-  end 
+    end
+  end
+  
+  describe "running a query for retriving each tabulator developer's name" do
+    before(:each) do
+      ConnectionPool.clear
+      @adapter = ConnectionPool.add_data_source(:type => :swc)
+      
+      mock_fetch('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
+      mock_fetch('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
+      mock_fetch('http://xmlns.com/foaf/0.1/name')
+      mock_fetch('http://usefulinc.com/ns/doap')
+      
+      @q = Query.new
+      @q.select_distinct(:name)
+      @q.where(@tabulator, DOAP::developer, :dev)
+      @q.where(:dev, FOAF::name, :name)
+      
+      @results = @q.execute
+    end
+    
+    it "should have loaded some triples" do
+      @adapter.should have_at_least(1).items
+    end
+    
+    it "should have got some results" do
+      @results.should == ['Timothy Berners-Lee']
+    end
+  end
+  
   
   # describe 'running a query' do
   #   before(:each) do
