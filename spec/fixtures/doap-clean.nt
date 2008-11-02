@@ -1,0 +1,10 @@
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#isDefinedBy> <http://usefulinc.com/ns/doap#> .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#label> "name"@en .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#label> "nom"@fr .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#label> "nombre"@es .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#comment> "A name of something."@en .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#comment> "Le nom de quelque chose."@fr .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#comment> "El nombre de algo."@es .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2000/01/rdf-schema#Literal> .
+<http://usefulinc.com/ns/doap#name> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.w3.org/2000/01/rdf-schema#label> .

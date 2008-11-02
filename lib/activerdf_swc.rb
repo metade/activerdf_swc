@@ -8,10 +8,6 @@ class SWCAdapter < FetchingAdapter
     @uris_retrieved = []
     @max_steps = params[:max_steps] || 1
     super
-    # hack to keep data cached between runs...
-    if (@db)
-      @db.execute('select distinct c from triple').flatten.each { |u| @uris_retrieved << $1 if u =~ /<(.*?)>/ }
-    end
   end
   
   def query(query, &block)
@@ -29,7 +25,7 @@ class SWCAdapter < FetchingAdapter
     end
     
     test_query = Query.new
-    triples.each { |t| t.each { |s| test_query.select(s) if s.kind_of? Symbol } }
+    triples.each { |t| t.each { |s| test_query.select_distinct(s) if s.kind_of? Symbol } }
     query.where_clauses.each { |w| test_query.where(w[0], w[1], w[2]) }
     results = super(test_query)
     results.each do |row|
@@ -38,13 +34,29 @@ class SWCAdapter < FetchingAdapter
       end
     end
     
+    # steps = 0
+    # while (steps<@max_steps)
+    #   steps+=1
+    #   
+    #   results = []
+    #   triples.each do |triple|
+    #     triple_query = Query.new.select.where(triple[0],triple[1],triple[2])
+    #     triple.each { |r| triple_query.select(r) if r.kind_of? Symbol }
+    #     triple_results = super(triple_query)
+    #     results << triple_results.flatten.uniq
+    #   end
+    #   intersection = results.first
+    #   results[1,-1].each { |r| intersection & r }
+    #   p results
+    #   p intersection
+    # end
+    
     super
   end
   
   def fetch(uri)
     return if uri =~ %r[http://www.activerdf.org/bnode/]
     uri = $1 if uri =~ /(.*?)\#.*/
-    puts "-> #{uri}"
     return if @uris_retrieved.include? uri
     super
     @uris_retrieved << uri 
