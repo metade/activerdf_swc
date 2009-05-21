@@ -1,36 +1,40 @@
-require 'rubygems'
 require 'active_rdf'
 
-class SWCAdapter < FetchingAdapter
+class SWCAdapter < RedlandAdapter
   ConnectionPool.register_adapter(:swc, self)
   
   def initialize(params={})
+    super
+    
     @uris_retrieved = []
     @max_steps = params[:max_steps] || 1
-    super
   end
   
-  def query(query, &block)
-    # Split SPARQL queries into a set of triple patterns
-    triples = query_to_triples(query)
+  def query(query)
+    # Convert query to SPARQL if necessary
+    sparql = query.kind_of?(Query) ? query.to_sp : query
     
-    triples.each do |triple|
-      # Dereference and fetch URIs in each triple      
-      uris = triple.map { |r| r.respond_to?(:uri) ? r.uri : nil }.compact
-      uris.each { |uri| fetch(uri) }
+    # Split SPARQL queries into a set of triple patterns
+    triples = query_to_triples(sparql)
+    # Extract any URIs in the triples
+    uris = select_uris_in_triples(triples)
+    
+    # Dereference and fetch all URIs in the query
+    uris.each { |uri| load(uri) }
       
-      # Fetch rdfs:seeAlso links related to the URIs in the triple
-      see_also_query = Query.new.select(:x, :y).where(:x, RDFS::seeAlso, :y)
-      fetch_see_also_results(super(see_also_query), uris)
-    end
+    # Fetch rdfs:seeAlso links related to the URIs in the triple
+    see_also_query = Query.new.select(:x, :y).where(:x, RDFS::seeAlso, :y)
+    fetch_see_also_results(super(see_also_query), uris)
     
     test_query = Query.new
     triples.each { |t| t.each { |s| test_query.select_distinct(s) if s.kind_of? Symbol } }
     query.where_clauses.each { |w| test_query.where(w[0], w[1], w[2]) }
     results = super(test_query)
+    puts Query2SPARQL.translate(query)
+    p results
     results.each do |row|
       row.each do |column|
-        fetch(column.uri) if column.respond_to? :uri
+        load(column.uri) if column.respond_to? :uri
       end
     end
     
@@ -54,7 +58,7 @@ class SWCAdapter < FetchingAdapter
     super
   end
   
-  def fetch(uri)
+	def load(location, syntax="ntriples")
     return if uri =~ %r[http://www.activerdf.org/bnode/]
     uri = $1 if uri =~ /(.*?)\#.*/
     return if @uris_retrieved.include? uri
@@ -72,7 +76,22 @@ class SWCAdapter < FetchingAdapter
     end
   end
   
+  def select_uris_in_triples(triples)
+    uris = []
+    triples.each do |triple|
+      triple.each { |e| uris << $1 if e =~ /<(.*?)>/ }
+    end
+    uris
+  end
+  
   def query_to_triples(query)
-    query.where_clauses
+    if query =~ /\{(.*?)\}/ 
+      triples = $1.split(' . ?')
+      triples.map do |triple| 
+        elems = triple.split(/ +/).select { |e| e.size>0 }
+        elems.map! { |e| e =~ /^\?(\w+)/ ? $1.to_sym : e }
+        elems[0,elems.size-1]
+      end
+    end
   end
 end

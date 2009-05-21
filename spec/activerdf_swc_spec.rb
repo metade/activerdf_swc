@@ -1,14 +1,17 @@
 require 'spec/spec_helper'
 
 describe SWCAdapter do
+  SWCAdapter.class_eval { attr_reader :model }
   
-  def mock_fetch(uri, filename=nil)
+  def mock_load(uri, filename=nil)
     triples = ''
     unless (filename.nil?)
       path = File.join(File.dirname(__FILE__), 'fixtures', "#{filename}.nt")
-      File.open(path) { |f| triples = f.read }
+      @adapter.stubs(:load).with(uri) do |u|
+        parser = Redland::Parser.new('ntriples', "", nil)
+        parser.parse_into_model(@adapter.model, "file:#{path}")
+      end
     end
-    @adapter.expects(:`).with(%[rapper --scan --quiet "#{uri}"]).returns(triples)
   end
   
   before(:each) do
@@ -17,13 +20,27 @@ describe SWCAdapter do
     @tabulator = RDFS::Resource.new('http://dig.csail.mit.edu/2005/ajar/ajaw/data#Tabulator')
   end
   
+  describe "splitting a query into triples" do
+    before(:each) do
+      ConnectionPool.clear
+      @adapter = ConnectionPool.add_data_source(:type => :swc)
+    end
+    
+    it do
+      query = "SELECT ?a WHERE { <http://foo.com> <http://foo.com/bar> ?a . }"
+      @adapter.send(:query_to_triples, query).should == [
+        ['<http://foo.com>', '<http://foo.com/bar>', :a]
+      ]
+    end
+  end
+  
   describe "running a query for retriving the tabulator project's name" do
     before(:each) do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
-      mock_fetch('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_fetch('http://usefulinc.com/ns/doap')
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
+      mock_load('http://usefulinc.com/ns/doap')
       
       @q = Query.new
       @q.select_distinct(:name)
@@ -46,15 +63,45 @@ describe SWCAdapter do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
-      mock_fetch('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_fetch('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
-      mock_fetch('http://xmlns.com/foaf/0.1/name')
-      mock_fetch('http://usefulinc.com/ns/doap')
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
+      mock_load('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
+      mock_load('http://xmlns.com/foaf/0.1/name')
+      mock_load('http://usefulinc.com/ns/doap')
       
       @q = Query.new
       @q.select_distinct(:name)
       @q.where(@tabulator, DOAP::developer, :dev)
       @q.where(:dev, FOAF::name, :name)
+      
+      @results = @q.execute
+    end
+    
+    it "should have loaded some triples" do
+      @adapter.should have_at_least(1).items
+    end
+    
+    it "should have got some results" do
+      @results.should == ['Timothy Berners-Lee']
+    end
+  end
+  
+  describe "running a query for retriving each tabulator developer friends' names" do
+    before(:each) do
+      ConnectionPool.clear
+      @adapter = ConnectionPool.add_data_source(:type => :swc)
+      
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
+      mock_load('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
+      mock_load('http://xmlns.com/foaf/0.1/name')
+      mock_load('http://xmlns.com/foaf/0.1/knows')
+      mock_load('http://usefulinc.com/ns/doap')
+      
+      @q = Query.new
+      @q.select_distinct(:name, :friend)
+      @q.where(@tabulator, DOAP::developer, :dev)
+      @q.where(:dev, FOAF::name, :name)
+      @q.where(:dev, FOAF::knows, :friend)
+      @q.where(:friend, FOAF::name, :friends_name)
       
       @results = @q.execute
     end

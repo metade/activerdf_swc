@@ -1,4 +1,7 @@
+require 'rubygems'
+require 'spec'
 require 'lib/activerdf_swc'
-                                                                                                             Spec::Runner.configure do |config|
+
+Spec::Runner.configure do |config|
   config.mock_with :mocha
 end

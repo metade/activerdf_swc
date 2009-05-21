@@ -2,3 +2,4 @@
 <http://www.w3.org/People/Berners-Lee/card#i> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
 <http://www.w3.org/People/Berners-Lee/card#i> <http://www.w3.org/2000/01/rdf-schema#label> "Tim Berners-Lee" .
 <http://www.w3.org/People/Berners-Lee/card#i> <http://www.w3.org/2000/01/rdf-schema#seeAlso> <http://dig.csail.mit.edu/2008/webdav/timbl/foaf.rdf> .
+<http://www.w3.org/People/Berners-Lee/card#i> <http://xmlns.com/foaf/0.1/knows> <http://bblfish.net/people/henry/card#me> .
