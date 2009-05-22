@@ -3,11 +3,12 @@ require 'spec/spec_helper'
 describe SWCAdapter do
   SWCAdapter.class_eval { attr_reader :model }
   
-  def mock_load(uri, filename=nil)
-    triples = ''
-    unless (filename.nil?)
+  def mock_load(uri, syntax='rdfxml', filename=nil)
+    if filename.nil?
+      @adapter.expects(:load).once.with(uri, syntax)
+    else  
       path = File.join(File.dirname(__FILE__), 'fixtures', "#{filename}.nt")
-      @adapter.stubs(:load).with(uri) do |u|
+      @adapter.expects(:load).once.with(uri, syntax) do |u,s|
         parser = Redland::Parser.new('ntriples', "", nil)
         parser.parse_into_model(@adapter.model, "file:#{path}")
       end
@@ -32,15 +33,49 @@ describe SWCAdapter do
         ['<http://foo.com>', '<http://foo.com/bar>', :a]
       ]
     end
+    
+    it do
+      query = "SELECT ?a, ?n WHERE { <http://foo.com> <http://foo.com/bar> ?a . ?a <http://foo.com/name> ?n . }"
+      @adapter.send(:query_to_triples, query).should == [
+        ['<http://foo.com>', '<http://foo.com/bar>', :a],
+        [:a, '<http://foo.com/name>', :n]
+      ]
+    end
+    
   end
+  
+  describe "making unbound (?!) query statements optional" do
+    before(:each) do
+      ConnectionPool.clear
+      @adapter = ConnectionPool.add_data_source(:type => :swc)
+    end
+    
+    it do
+      q1 = "SELECT ?a WHERE { <http://foo.com> <http://foo.com/bar> ?a . }"
+      q2 = "SELECT DISTINCT ?a WHERE { <http://foo.com> <http://foo.com/bar> ?a . }"
+      @adapter.send(:munge_query, q1).should == q2
+    end
+    
+    it do
+      q1 = "SELECT ?a, ?n WHERE { <http://foo.com> <http://foo.com/bar> ?a . ?a <http://foo.com/name> ?n . }"
+      q2 = "SELECT DISTINCT ?a,?n WHERE { <http://foo.com> <http://foo.com/bar> ?a . OPTIONAL { ?a <http://foo.com/name> ?n .  }}"
+      @adapter.send(:munge_query, q1).should == q2
+    end
+    
+    it do
+      q1 = "SELECT ?n WHERE { <http://foo.com> <http://foo.com/bar> ?a . ?a <http://foo.com/name> ?n . }"
+      q2 = "SELECT DISTINCT ?a,?n WHERE { <http://foo.com> <http://foo.com/bar> ?a . OPTIONAL { ?a <http://foo.com/name> ?n .  }}"
+      @adapter.send(:munge_query, q1).should == q2
+    end
+  end    
   
   describe "running a query for retriving the tabulator project's name" do
     before(:each) do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
-      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_load('http://usefulinc.com/ns/doap')
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'rdfxml', 'tabulator-clean')
+      mock_load('http://usefulinc.com/ns/doap', 'rdfxml')
       
       @q = Query.new
       @q.select_distinct(:name)
@@ -63,10 +98,10 @@ describe SWCAdapter do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
-      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_load('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
-      mock_load('http://xmlns.com/foaf/0.1/name')
-      mock_load('http://usefulinc.com/ns/doap')
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'rdfxml', 'tabulator-clean')
+      mock_load('http://www.w3.org/People/Berners-Lee/card', 'rdfxml', 'timbl-clean')
+      # mock_load('http://xmlns.com/foaf/0.1/name', 'rdfxml')
+      mock_load('http://usefulinc.com/ns/doap', 'rdfxml')
       
       @q = Query.new
       @q.select_distinct(:name)
@@ -84,20 +119,21 @@ describe SWCAdapter do
       @results.should == ['Timothy Berners-Lee']
     end
   end
-  
+
   describe "running a query for retriving each tabulator developer friends' names" do
     before(:each) do
       ConnectionPool.clear
       @adapter = ConnectionPool.add_data_source(:type => :swc)
       
-      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'tabulator-clean')
-      mock_load('http://www.w3.org/People/Berners-Lee/card', 'timbl-clean')
-      mock_load('http://xmlns.com/foaf/0.1/name')
-      mock_load('http://xmlns.com/foaf/0.1/knows')
-      mock_load('http://usefulinc.com/ns/doap')
+      mock_load('http://dig.csail.mit.edu/2005/ajar/ajaw/data', 'rdfxml', 'tabulator-clean')
+      mock_load('http://www.w3.org/People/Berners-Lee/card', 'rdfxml', 'timbl-clean')
+      mock_load('http://bblfish.net/people/henry/card', 'rdfxml', 'henry-clean')
+      mock_load('http://usefulinc.com/ns/doap', 'rdfxml')
+      # mock_load('http://xmlns.com/foaf/0.1/name')
+      # mock_load('http://xmlns.com/foaf/0.1/knows')
       
       @q = Query.new
-      @q.select_distinct(:name, :friend)
+      @q.select_distinct(:name, :friends_name)
       @q.where(@tabulator, DOAP::developer, :dev)
       @q.where(:dev, FOAF::name, :name)
       @q.where(:dev, FOAF::knows, :friend)
@@ -111,10 +147,9 @@ describe SWCAdapter do
     end
     
     it "should have got some results" do
-      @results.should == ['Timothy Berners-Lee']
+      @results.should == [['Timothy Berners-Lee', 'Henry J. Story']]
     end
   end
-  
   
   # describe 'running a query' do
   #   before(:each) do

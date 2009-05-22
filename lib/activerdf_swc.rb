@@ -7,7 +7,7 @@ class SWCAdapter < RedlandAdapter
     super
     
     @uris_retrieved = []
-    @max_steps = params[:max_steps] || 1
+    @max_steps = params[:max_steps] || 5
   end
   
   def query(query)
@@ -20,49 +20,41 @@ class SWCAdapter < RedlandAdapter
     uris = select_uris_in_triples(triples)
     
     # Dereference and fetch all URIs in the query
-    uris.each { |uri| load(uri) }
+    uris.each { |uri| swc_load(uri) }
       
     # Fetch rdfs:seeAlso links related to the URIs in the triple
     see_also_query = Query.new.select(:x, :y).where(:x, RDFS::seeAlso, :y)
-    fetch_see_also_results(super(see_also_query), uris)
+    # fetch_see_also_results(super(see_also_query), uris)
     
-    test_query = Query.new
-    triples.each { |t| t.each { |s| test_query.select_distinct(s) if s.kind_of? Symbol } }
-    query.where_clauses.each { |w| test_query.where(w[0], w[1], w[2]) }
-    results = super(test_query)
-    puts Query2SPARQL.translate(query)
-    p results
-    results.each do |row|
-      row.each do |column|
-        load(column.uri) if column.respond_to? :uri
+    test_query = munge_query(sparql, triples)
+    
+    steps = 0
+    while (steps<@max_steps)
+      steps+=1
+      
+      redland_query = Redland::Query.new(test_query, 'sparql')
+      query_results = @model.query_execute(redland_query)
+      results = query_result_to_array(query_results)
+      
+      results.each do |row|
+        row.each do |column|
+          swc_load(column.uri) if column.respond_to? :uri
+        end
       end
     end
     
-    # steps = 0
-    # while (steps<@max_steps)
-    #   steps+=1
-    #   
-    #   results = []
-    #   triples.each do |triple|
-    #     triple_query = Query.new.select.where(triple[0],triple[1],triple[2])
-    #     triple.each { |r| triple_query.select(r) if r.kind_of? Symbol }
-    #     triple_results = super(triple_query)
-    #     results << triple_results.flatten.uniq
-    #   end
-    #   intersection = results.first
-    #   results[1,-1].each { |r| intersection & r }
-    #   p results
-    #   p intersection
-    # end
-    
-    super
+    redland_query = Redland::Query.new(sparql, 'sparql')
+    query_results = @model.query_execute(redland_query)
+    results = query_result_to_array(query_results)
   end
   
-	def load(location, syntax="ntriples")
-    return if uri =~ %r[http://www.activerdf.org/bnode/]
+  def swc_load(uri, syntax='rdfxml')
+    return if uri =~ %r[http://www.activerdf.org/bnode/] 
+    return if uri =~ %r[http://xmlns.com/foaf]
+    
     uri = $1 if uri =~ /(.*?)\#.*/
     return if @uris_retrieved.include? uri
-    super
+    load(uri, syntax)
     @uris_retrieved << uri 
   end
   
@@ -84,13 +76,32 @@ class SWCAdapter < RedlandAdapter
     uris
   end
   
+  def triple_to_clause(triple)
+    triple.map do |elem|
+      elem.kind_of?(Symbol) ? "?#{elem.to_s}" : elem
+    end.join(' ') + ' . '
+  end
+  
+  def munge_query(query, triples = query_to_triples(query))
+    bindings = extract_bindings(query)
+    clauses = triples.map do |triple|
+      (triple.first.kind_of? Symbol and triple.last.kind_of? Symbol) ?
+        "OPTIONAL { #{triple_to_clause(triple)} }" : triple_to_clause(triple)
+    end
+    # query.sub(/\{(.*?)\}/, "{ #{clauses}}")
+    "SELECT DISTINCT #{bindings.join(',')} WHERE { #{clauses}}"
+  end
+  
+  def extract_bindings(query)
+    query.scan(/\?(\w+) /).uniq.sort.map { |b| "?#{b}" }
+  end
+  
   def query_to_triples(query)
     if query =~ /\{(.*?)\}/ 
-      triples = $1.split(' . ?')
+      triples = $1.split(/ \. ?/)
       triples.map do |triple| 
         elems = triple.split(/ +/).select { |e| e.size>0 }
         elems.map! { |e| e =~ /^\?(\w+)/ ? $1.to_sym : e }
-        elems[0,elems.size-1]
       end
     end
   end
